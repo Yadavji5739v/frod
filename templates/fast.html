@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fraud Detection - Fast</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a1a; color: #fff; line-height: 1.6; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .card { background: #2a2a2a; border: 1px solid #333; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    h1 { color: #00ff88; margin-bottom: 20px; }
+    h2 { color: #00ff88; margin-bottom: 15px; }
+    button { background: #00ff88; color: #000; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button:hover:not(:disabled) { background: #00cc6a; }
+    input, select { background: #333; color: #fff; border: 1px solid #555; padding: 8px; border-radius: 4px; margin: 5px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+    .status { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+    .pill { background: #333; padding: 5px 10px; border-radius: 15px; font-size: 12px; }
+    .ok { background: #00ff88; color: #000; }
+    .warn { background: #ffaa00; color: #000; }
+    .log { background: #000; padding: 15px; border-radius: 5px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Fraud Detection System - Fast Mode</h1>
+    
+    <div class="status" id="statusBar"></div>
+    
+    <div class="card">
+      <h2>1. Upload CSV</h2>
+      <div class="row">
+        <input type="file" id="fileInput" accept=".csv" />
+        <button id="uploadBtn">Upload</button>
+      </div>
+      <div id="uploadInfo"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. Preprocess & Train</h2>
+      <div class="row">
+        <button id="preprocessBtn" disabled>Preprocess</button>
+        <select id="modelType" disabled>
+          <option value="logistic_regression">Logistic Regression (Fast)</option>
+          <option value="random_forest">Random Forest</option>
+        </select>
+        <button id="trainBtn" disabled>Train</button>
+      </div>
+      <div id="trainInfo"></div>
+    </div>
+
+    <div class="card">
+      <h2>3. Evaluate</h2>
+      <div class="row">
+        <button id="evalBtn" disabled>Evaluate</button>
+      </div>
+      <div id="evalMetrics"></div>
+    </div>
+
+    <div class="card">
+      <h2>4. Predict</h2>
+      <div class="row">
+        <input id="predictInput" type="text" placeholder="Enter features: 0.1, -1.2, 0.5..." style="flex: 1;" />
+        <button id="predictBtn" disabled>Predict</button>
+      </div>
+      <div id="predictResult"></div>
+    </div>
+
+    <div class="card">
+      <h2>Logs</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <script>
+    // Fast, minimal JavaScript
+    const elements = {
+      statusBar: document.getElementById('statusBar'),
+      log: document.getElementById('log'),
+      uploadBtn: document.getElementById('uploadBtn'),
+      fileInput: document.getElementById('fileInput'),
+      preprocessBtn: document.getElementById('preprocessBtn'),
+      modelType: document.getElementById('modelType'),
+      trainBtn: document.getElementById('trainBtn'),
+      evalBtn: document.getElementById('evalBtn'),
+      predictBtn: document.getElementById('predictBtn'),
+      predictInput: document.getElementById('predictInput'),
+      uploadInfo: document.getElementById('uploadInfo'),
+      trainInfo: document.getElementById('trainInfo'),
+      evalMetrics: document.getElementById('evalMetrics'),
+      predictResult: document.getElementById('predictResult')
+    };
+
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      elements.log.innerHTML += `[${time}] ${msg}<br>`;
+      elements.log.scrollTop = elements.log.scrollHeight;
+    }
+
+    function setStatus(state) {
+      elements.statusBar.innerHTML = '';
+      const items = [
+        { k: 'Data', v: state.data_loaded },
+        { k: 'Preprocessed', v: state.preprocessed },
+        { k: 'Trained', v: state.trained },
+        { k: 'Model', v: state.model_type || '-' }
+      ];
+      
+      items.forEach(s => {
+        const span = document.createElement('span');
+        span.className = `pill ${s.v === true ? 'ok' : (s.v ? 'warn' : '')}`;
+        span.textContent = `${s.k}: ${s.v}`;
+        elements.statusBar.appendChild(span);
+      });
+
+      elements.preprocessBtn.disabled = !state.data_loaded;
+      elements.modelType.disabled = !state.data_loaded;
+      elements.trainBtn.disabled = !state.data_loaded;
+      elements.evalBtn.disabled = !state.trained;
+      elements.predictBtn.disabled = !state.trained;
+    }
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch('/status');
+        const data = await res.json();
+        setStatus(data);
+      } catch (e) { log('Status error: ' + e.message); }
+    }
+
+    async function upload() {
+      const file = elements.fileInput.files[0];
+      if (!file) return alert('Select a CSV file');
+      
+      const form = new FormData();
+      form.append('file', file);
+      log(`Uploading ${(file.size / 1024 / 1024).toFixed(1)}MB file...`);
+      
+      try {
+        const res = await fetch('/upload', { method: 'POST', body: form });
+        const data = await res.json();
+        
+        if (data.success) {
+          elements.uploadInfo.textContent = `${data.message} | Fraud: ${data.data_info.fraud_percentage}%`;
+          log('Upload successful');
+          await refreshStatus();
+        } else {
+          log('Upload failed: ' + (data.error || ''));
+          alert(data.error || 'Upload failed');
+        }
+      } catch (e) {
+        log('Upload error: ' + e.message);
+        alert('Upload failed: ' + e.message);
+      }
+    }
+
+    async function preprocess() {
+      log('Preprocessing...');
+      const res = await fetch('/preprocess', { method: 'POST' });
+      const data = await res.json();
+      
+      if (data.success) {
+        elements.trainInfo.textContent = `Train: ${data.training_shape}, Test: ${data.testing_shape}`;
+        log('Preprocessing completed');
+        await refreshStatus();
+      } else {
+        log('Preprocess failed: ' + (data.error || ''));
+        alert(data.error || 'Preprocess failed');
+      }
+    }
+
+    async function train() {
+      const type = elements.modelType.value;
+      log(`Training ${type}...`);
+      const res = await fetch('/train', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ model_type: type }) 
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        elements.trainInfo.textContent = `${data.message} | Accuracy: ${data.training_accuracy}`;
+        log('Training completed');
+        await refreshStatus();
+      } else {
+        log('Training failed: ' + (data.error || ''));
+        alert(data.error || 'Training failed');
+      }
+    }
+
+    async function evaluate() {
+      log('Evaluating...');
+      const res = await fetch('/evaluate', { method: 'POST' });
+      const data = await res.json();
+      
+      if (data.success) {
+        elements.evalMetrics.innerHTML = `
+          <div><strong>Test Accuracy: ${data.test_accuracy}</strong></div>
+          <div style="margin-top: 10px;">
+            <strong>Classification Report:</strong>
+            <pre style="background: #000; padding: 10px; margin-top: 5px; overflow: auto; max-height: 200px;">
+${JSON.stringify(data.classification_report, null, 2)}
+            </pre>
+          </div>
+        `;
+        log('Evaluation completed');
+      } else {
+        log('Evaluation failed: ' + (data.error || ''));
+        alert(data.error || 'Evaluation failed');
+      }
+    }
+
+    async function predict() {
+      const text = elements.predictInput.value.trim();
+      if (!text) return alert('Enter feature values');
+      
+      const arr = text.split(',').map(x => Number(x.trim())).filter(x => !Number.isNaN(x));
+      log('Predicting...');
+      
+      const res = await fetch('/predict', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ transaction_data: arr }) 
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        const result = data.prediction === 1 ? '🚨 FRAUD' : '✅ LEGITIMATE';
+        elements.predictResult.innerHTML = `<strong style="color: ${data.prediction === 1 ? '#ff4444' : '#00ff88'}">${result}</strong>`;
+        log('Prediction completed');
+      } else {
+        log('Prediction failed: ' + (data.error || ''));
+        alert(data.error || 'Prediction failed');
+      }
+    }
+
+    // Event listeners
+    elements.uploadBtn.addEventListener('click', upload);
+    elements.preprocessBtn.addEventListener('click', preprocess);
+    elements.trainBtn.addEventListener('click', train);
+    elements.evalBtn.addEventListener('click', evaluate);
+    elements.predictBtn.addEventListener('click', predict);
+
+    // Initialize
+    refreshStatus();
+    log('Fast mode loaded - Ready to go! 🚀');
+  </script>
+</body>
+</html>

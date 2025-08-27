@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Credit Card Fraud Detection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --brand:#22c55e; --brand-700:#15803d; --accent:#1f2937; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: linear-gradient(180deg, #0b1220 0%, #0f172a 100%); color: var(--text); }
+    header { padding: 24px 20px; border-bottom: 1px solid #1f2937; position: sticky; top:0; background: rgba(15,23,42,0.9); backdrop-filter: blur(6px); z-index: 10; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    h1 { font-size: 24px; margin: 0; }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+    .card { grid-column: span 12; background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02)); border: 1px solid #1f2937; border-radius: 14px; padding: 16px; }
+    @media (min-width: 900px){ .span-5{ grid-column: span 5; } .span-7{ grid-column: span 7; } }
+    .card h2 { margin: 0 0 10px; font-size: 18px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    button, .button { background: var(--brand); color: #052e16; border: none; padding: 10px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; transition: transform .05s ease, background .2s ease; }
+    button:hover { background: var(--brand-700); color: #eafff1; }
+    button:disabled { opacity:.6; cursor: not-allowed; }
+    input[type="file"], select, input[type="text"], textarea { background: #0b1220; color: var(--text); border:1px solid #1f2937; border-radius: 10px; padding: 10px; }
+    code, pre { background: #0b1220; border:1px solid #1f2937; border-radius: 8px; padding: 10px; display:block; overflow:auto; max-height: 300px; }
+    img { max-width: 100%; border-radius: 10px; border:1px solid #1f2937; }
+    .badge { display:inline-flex; align-items:center; gap:6px; background:#0b1220; border:1px solid #1f2937; padding:6px 10px; border-radius: 999px; font-size:12px; }
+    .status { display:flex; gap:10px; flex-wrap:wrap; }
+    .pill { padding:6px 10px; border-radius:999px; border:1px solid #1f2937; background:#0b1220; font-size:12px; }
+    .ok { color:#22c55e; border-color:#14532d; }
+    .warn { color:#f59e0b; border-color:#7c2d12; }
+    .err { color:#ef4444; border-color:#7f1d1d; }
+    .footer { text-align:center; color:#94a3b8; font-size:12px; padding: 20px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container row" style="justify-content: space-between;">
+      <h1>Credit Card Fraud Detection</h1>
+      <div class="status" id="statusBar"></div>
+    </div>
+  </header>
+  <div class="container">
+    <div class="grid">
+             <div class="card span-5">
+         <h2>1) Upload CSV</h2>
+         <p class="muted">Upload dataset with a `Class` column.</p>
+         <div class="row">
+           <input type="file" id="fileInput" accept=".csv" />
+           <button id="uploadBtn">Upload</button>
+         </div>
+         <div id="uploadProgress" style="display:none; margin-top:10px;">
+           <div style="background:#0b1220; border-radius:8px; overflow:hidden;">
+             <div id="progressBar" style="background:var(--brand); height:4px; width:0%; transition:width 0.3s ease;"></div>
+           </div>
+           <div id="progressText" class="muted" style="margin-top:5px; font-size:12px;">Processing...</div>
+         </div>
+         <div id="uploadInfo" class="muted" style="margin-top:10px;"></div>
+       </div>
+
+      <div class="card span-7">
+        <h2>2) Preprocess & Train</h2>
+        <div class="row" style="margin-bottom:10px;">
+          <button id="preprocessBtn" disabled>Preprocess</button>
+          <select id="modelType" disabled>
+            <option value="random_forest">Random Forest</option>
+            <option value="logistic_regression">Logistic Regression</option>
+            <option value="xgboost">XGBoost (if available)</option>
+          </select>
+          <button id="trainBtn" disabled>Train</button>
+        </div>
+        <div id="trainInfo" class="muted"></div>
+      </div>
+
+      <div class="card span-7">
+        <h2>3) Evaluate</h2>
+        <div class="row" style="margin-bottom:10px;">
+          <button id="evalBtn" disabled>Evaluate Model</button>
+        </div>
+        <div id="evalMetrics" class="muted"></div>
+        <div id="confusionWrap" style="margin-top:12px; display:none;">
+          <img id="confusionImg" alt="Confusion Matrix" />
+        </div>
+      </div>
+
+      <div class="card span-5">
+        <h2>4) Predict Single Transaction</h2>
+        <p class="muted">Comma-separated features matching training columns.</p>
+        <div class="row" style="margin-bottom:10px;">
+          <input id="predictInput" type="text" placeholder="e.g., 0.1, -1.2, ..." style="flex:1" />
+          <button id="predictBtn" disabled>Predict</button>
+        </div>
+        <div id="predictResult" class="muted"></div>
+      </div>
+
+      <div class="card span-12">
+        <h2>5) Feature Importance</h2>
+        <div class="row" style="margin-bottom:10px;">
+          <button id="featBtn" disabled>Show Top Features</button>
+        </div>
+        <div id="featTop" class="muted"></div>
+        <div id="featImgWrap" style="margin-top:12px; display:none;">
+          <img id="featImg" alt="Feature Importance" />
+        </div>
+      </div>
+
+      <div class="card span-12">
+        <h2>Logs</h2>
+        <pre id="log"></pre>
+      </div>
+    </div>
+    <div class="footer">Built with Flask • Ready to run: flask run</div>
+  </div>
+
+  <script>
+    const statusBar = document.getElementById('statusBar');
+    const logEl = document.getElementById('log');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const fileInput = document.getElementById('fileInput');
+    const preprocessBtn = document.getElementById('preprocessBtn');
+    const modelType = document.getElementById('modelType');
+    const trainBtn = document.getElementById('trainBtn');
+    const evalBtn = document.getElementById('evalBtn');
+    const predictBtn = document.getElementById('predictBtn');
+    const predictInput = document.getElementById('predictInput');
+    const featBtn = document.getElementById('featBtn');
+
+    const uploadInfo = document.getElementById('uploadInfo');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const trainInfo = document.getElementById('trainInfo');
+    const evalMetrics = document.getElementById('evalMetrics');
+    const confusionWrap = document.getElementById('confusionWrap');
+    const confusionImg = document.getElementById('confusionImg');
+    const featTop = document.getElementById('featTop');
+    const featImgWrap = document.getElementById('featImgWrap');
+    const featImg = document.getElementById('featImg');
+
+    function log(msg){
+      const time = new Date().toLocaleTimeString();
+      logEl.textContent += `[${time}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setStatus(state){
+      statusBar.innerHTML = '';
+      const items = [
+        { k:'Data', v: state.data_loaded },
+        { k:'Preprocessed', v: state.preprocessed },
+        { k:'Trained', v: state.trained },
+        { k:'Model', v: state.model_type || '-' },
+        { k:'File', v: state.filename || '-' },
+      ];
+      for(const s of items){
+        const span = document.createElement('span');
+        span.className = `pill ${s.v===true? 'ok': (s.v? 'warn':'')}`;
+        span.textContent = `${s.k}: ${s.v}`;
+        statusBar.appendChild(span);
+      }
+
+      preprocessBtn.disabled = !state.data_loaded;
+      modelType.disabled = !state.data_loaded;
+      trainBtn.disabled = !state.data_loaded;
+      evalBtn.disabled = !state.trained;
+      predictBtn.disabled = !state.trained;
+      featBtn.disabled = !state.trained;
+    }
+
+    async function refreshStatus(){
+      try{
+        const res = await fetch('/status');
+        const data = await res.json();
+        setStatus(data);
+      }catch(e){ log('Status error: '+e.message); }
+    }
+
+    async function upload(){
+      const file = fileInput.files[0];
+      if(!file){ return alert('Select a CSV file'); }
+      
+      // Show progress for large files
+      const fileSizeMB = file.size / (1024 * 1024);
+      if(fileSizeMB > 10) {
+        uploadProgress.style.display = 'block';
+        progressText.textContent = `Uploading ${fileSizeMB.toFixed(1)}MB file...`;
+        progressBar.style.width = '25%';
+      }
+      
+      const form = new FormData();
+      form.append('file', file);
+      log(`Uploading ${fileSizeMB.toFixed(1)}MB file...`);
+      
+      try {
+        const res = await fetch('/upload', { method:'POST', body: form });
+        const data = await res.json();
+        
+        if(data.success){
+          progressBar.style.width = '100%';
+          progressText.textContent = 'Processing complete!';
+          
+          setTimeout(() => {
+            uploadProgress.style.display = 'none';
+            progressBar.style.width = '0%';
+          }, 2000);
+          
+          uploadInfo.textContent = `${data.message}. Fraud %: ${data.data_info.fraud_percentage}`;
+          log('Upload successful');
+          await refreshStatus();
+        } else {
+          log('Upload failed: '+(data.error||'Unknown error'));
+          alert(data.error || 'Upload failed');
+          uploadProgress.style.display = 'none';
+        }
+      } catch(e) {
+        log('Upload error: ' + e.message);
+        alert('Upload failed: ' + e.message);
+        uploadProgress.style.display = 'none';
+      }
+    }
+
+    async function preprocess(){
+      log('Preprocessing data...');
+      const res = await fetch('/preprocess', { method:'POST' });
+      const data = await res.json();
+      if(data.success){
+        trainInfo.textContent = `Training set: ${data.training_shape}, Test set: ${data.testing_shape}`;
+        log('Preprocessing completed');
+        await refreshStatus();
+      } else { log('Preprocess failed: '+(data.error||'')); alert(data.error || 'Preprocess failed'); }
+    }
+
+    async function train(){
+      const type = modelType.value;
+      log(`Training model: ${type}...`);
+      const res = await fetch('/train', { method:'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ model_type: type }) });
+      const data = await res.json();
+      if(data.success){
+        trainInfo.textContent = `${data.message}. Train accuracy: ${data.training_accuracy}`;
+        log('Training completed');
+        await refreshStatus();
+      } else { log('Training failed: '+(data.error||'')); alert(data.error || 'Training failed'); }
+    }
+
+    async function evaluate(){
+      log('Evaluating model...');
+      const res = await fetch('/evaluate', { method:'POST' });
+      const data = await res.json();
+      if(data.success){
+        evalMetrics.innerHTML = `
+          <div>Test accuracy: <b>${data.test_accuracy}</b></div>
+          <div><b>Classification report</b></div>
+          <pre>${JSON.stringify(data.classification_report, null, 2)}</pre>
+        `;
+        confusionImg.src = `data:image/png;base64,${data.confusion_matrix_plot}`;
+        confusionWrap.style.display = 'block';
+        log('Evaluation completed');
+      } else { log('Evaluation failed: '+(data.error||'')); alert(data.error || 'Evaluation failed'); }
+    }
+
+    async function predict(){
+      const text = predictInput.value.trim();
+      if(!text){ return alert('Enter feature values'); }
+      const arr = text.split(',').map(x=> Number(x.trim())).filter(x=> !Number.isNaN(x));
+      log('Predicting...');
+      const res = await fetch('/predict', { method:'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ transaction_data: arr }) });
+      const data = await res.json();
+      if(data.success){
+        predictResult.textContent = `Prediction: ${data.prediction === 1 ? 'FRAUD' : 'LEGITIMATE'}`;
+        log('Prediction completed');
+      } else { log('Prediction failed: '+(data.error||'')); alert(data.error || 'Prediction failed'); }
+    }
+
+    async function features(){
+      log('Fetching feature importance...');
+      const res = await fetch('/feature-importance', { method:'POST' });
+      const data = await res.json();
+      if(data.success){
+        featTop.innerHTML = `<pre>${JSON.stringify(data.top_features, null, 2)}</pre>`;
+        featImg.src = `data:image/png;base64,${data.feature_importance_plot}`;
+        featImgWrap.style.display = 'block';
+        log('Feature importance ready');
+      } else { log('Feature importance failed: '+(data.error||'')); alert(data.error || 'Feature importance failed'); }
+    }
+
+    uploadBtn.addEventListener('click', upload);
+    preprocessBtn.addEventListener('click', preprocess);
+    trainBtn.addEventListener('click', train);
+    evalBtn.addEventListener('click', evaluate);
+    predictBtn.addEventListener('click', predict);
+    featBtn.addEventListener('click', features);
+
+    refreshStatus();
+  </script>
+</body>
+</html>
